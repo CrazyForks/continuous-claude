@@ -201,18 +201,29 @@ wait_for_pr_checks() {
         fi
 
         local pr_info
-        if ! pr_info=$(gh pr view "$pr_number" --repo "$owner/$repo" --json reviewDecision,reviewRequests 2>&1); then
+        # DEBUG: Request all review-related fields to see what's available
+        if ! pr_info=$(gh pr view "$pr_number" --repo "$owner/$repo" --json reviewDecision,reviewRequests,reviews,latestReviews 2>&1); then
             echo "⚠️  $iteration_display Failed to get PR review status: $pr_info" >&2
             return 1
         fi
 
+        # DEBUG: Log the full JSON response
+        echo "🔍 DEBUG: Full PR info JSON:" >&2
+        echo "$pr_info" | jq '.' >&2
+        echo "" >&2
+
         local review_decision=$(echo "$pr_info" | jq -r 'if .reviewDecision == "" then "null" else (.reviewDecision // "null") end')
         local review_requests_count=$(echo "$pr_info" | jq '.reviewRequests | length' 2>/dev/null || echo "0")
+        
+        # DEBUG: Log extracted values
+        echo "🔍 DEBUG: review_decision='$review_decision', review_requests_count='$review_requests_count'" >&2
         
         local reviews_pending=false
         if [ "$review_decision" = "REVIEW_REQUIRED" ] || [ "$review_requests_count" -gt 0 ]; then
             reviews_pending=true
         fi
+        
+        echo "🔍 DEBUG: reviews_pending='$reviews_pending'" >&2
         
         if [ -n "$review_decision" ] && [ "$review_decision" != "null" ]; then
             echo "   👁️  Review status: $review_decision" >&2
@@ -290,11 +301,15 @@ merge_pr_and_cleanup() {
     local iteration_display="$5"
     local current_branch="$6"
 
-    echo "🔀 $iteration_display Merging PR #$pr_number..." >&2
-    if ! gh pr merge "$pr_number" --repo "$owner/$repo" --squash >/dev/null 2>&1; then
-        echo "⚠️  $iteration_display Failed to merge PR (may have conflicts or be blocked)" >&2
-        return 1
-    fi
+    echo "🔀 $iteration_display [DEBUG] Would merge PR #$pr_number (merge commented out for debugging)..." >&2
+    # DEBUG: Commenting out actual merge to test review detection
+    # if ! gh pr merge "$pr_number" --repo "$owner/$repo" --squash >/dev/null 2>&1; then
+    #     echo "⚠️  $iteration_display Failed to merge PR (may have conflicts or be blocked)" >&2
+    #     return 1
+    # fi
+    
+    echo "⚠️  $iteration_display [DEBUG] Skipping merge - exiting for review detection testing" >&2
+    return 1
 
     echo "📥 $iteration_display Pulling latest from main..." >&2
     if ! git checkout "$current_branch" >/dev/null 2>&1; then
