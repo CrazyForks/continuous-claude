@@ -145,14 +145,18 @@ wait_for_pr_checks() {
     local max_iterations=180  # 180 * 10 seconds = 30 minutes
     local iteration=0
 
+    local prev_check_count=""
+    local prev_success_count=""
+    local prev_pending_count=""
+    local prev_failed_count=""
+    local prev_review_status=""
+    local prev_no_checks_configured=""
+
     while [ $iteration -lt $max_iterations ]; do
-        echo "🔍 $iteration_display Checking PR status (iteration $((iteration + 1))/$max_iterations)..." >&2
-        
         local checks_json
         local no_checks_configured=false
         if ! checks_json=$(gh pr checks "$pr_number" --repo "$owner/$repo" --json state,bucket 2>&1); then
             if echo "$checks_json" | grep -q "no checks"; then
-                echo "   📊 No checks configured" >&2
                 no_checks_configured=true
                 checks_json="[]"
             else
@@ -163,10 +167,6 @@ wait_for_pr_checks() {
 
         local check_count=$(echo "$checks_json" | jq 'length' 2>/dev/null || echo "0")
         
-        if [ "$no_checks_configured" = "false" ]; then
-            echo "   📊 Found $check_count check(s)" >&2
-        fi
-        
         local all_completed=true
         local all_success=true
         
@@ -174,11 +174,11 @@ wait_for_pr_checks() {
             all_completed=false
         fi
 
+        local pending_count=0
+        local success_count=0
+        local failed_count=0
+        
         if [ "$check_count" -gt 0 ]; then
-            local pending_count=0
-            local success_count=0
-            local failed_count=0
-            
             local idx=0
             while [ $idx -lt $check_count ]; do
                 local state=$(echo "$checks_json" | jq -r ".[$idx].state")
@@ -196,8 +196,6 @@ wait_for_pr_checks() {
 
                 idx=$((idx + 1))
             done
-            
-            echo "   🟢 $success_count    🟡 $pending_count    🔴 $failed_count" >&2
         fi
 
         local pr_info
@@ -214,18 +212,56 @@ wait_for_pr_checks() {
             reviews_pending=true
         fi
         
+        local review_status="None"
         if [ -n "$review_decision" ] && [ "$review_decision" != "null" ]; then
-            echo "   👁️  Review status: $review_decision" >&2
+            review_status="$review_decision"
         elif [ "$review_requests_count" -gt 0 ]; then
-            echo "   👁️  Review status: $review_requests_count review(s) requested" >&2
-        else
-            echo "   👁️  Review status: None" >&2
+            review_status="$review_requests_count review(s) requested"
+        fi
+        
+        # Check if anything changed
+        local state_changed=false
+        if [ "$check_count" != "$prev_check_count" ] || \
+           [ "$success_count" != "$prev_success_count" ] || \
+           [ "$pending_count" != "$prev_pending_count" ] || \
+           [ "$failed_count" != "$prev_failed_count" ] || \
+           [ "$review_status" != "$prev_review_status" ] || \
+           [ "$no_checks_configured" != "$prev_no_checks_configured" ] || \
+           [ -z "$prev_check_count" ]; then
+            state_changed=true
+        fi
+        
+        # Only log if state changed
+        if [ "$state_changed" = "true" ]; then
+            echo "" >&2
+            echo "🔍 $iteration_display Checking PR status (iteration $((iteration + 1))/$max_iterations)..." >&2
+            
+            if [ "$no_checks_configured" = "true" ]; then
+                echo "   📊 No checks configured" >&2
+            else
+                echo "   📊 Found $check_count check(s)" >&2
+            fi
+            
+            if [ "$check_count" -gt 0 ]; then
+                echo "   🟢 $success_count    🟡 $pending_count    🔴 $failed_count" >&2
+            fi
+            
+            echo "   👁️  Review status: $review_status" >&2
+            
+            # Update previous state
+            prev_check_count="$check_count"
+            prev_success_count="$success_count"
+            prev_pending_count="$pending_count"
+            prev_failed_count="$failed_count"
+            prev_review_status="$review_status"
+            prev_no_checks_configured="$no_checks_configured"
         fi
 
         if [ "$check_count" -eq 0 ] && [ "$checks_json" != "" ] && [ "$checks_json" != "[]" ] && [ "$no_checks_configured" = "false" ]; then
             if [ "$iteration" -lt 18 ]; then
-                echo "⏳ Waiting for checks to start... (will timeout after 3 minutes)" >&2
-                echo "" >&2
+                if [ "$state_changed" = "true" ]; then
+                    echo "⏳ Waiting for checks to start... (will timeout after 3 minutes)" >&2
+                fi
                 sleep 10
                 iteration=$((iteration + 1))
                 continue
@@ -248,7 +284,9 @@ wait_for_pr_checks() {
         fi
         
         if [ "$all_completed" = "true" ] && [ "$all_success" = "true" ] && [ "$reviews_pending" = "true" ]; then
-            echo "   ✅ All checks passed, but waiting for review..." >&2
+            if [ "$state_changed" = "true" ]; then
+                echo "   ✅ All checks passed, but waiting for review..." >&2
+            fi
         fi
 
         if [ "$all_completed" = "true" ] && [ "$all_success" = "false" ]; then
@@ -271,10 +309,8 @@ wait_for_pr_checks() {
             waiting_items+=("code review")
         fi
         
-        if [ ${#waiting_items[@]} -gt 0 ]; then
+        if [ ${#waiting_items[@]} -gt 0 ] && [ "$state_changed" = "true" ]; then
             echo "⏳ Waiting for: ${waiting_items[*]}" >&2
-            echo "   💤 Sleeping for 10 seconds before next check..." >&2
-            echo "" >&2
         fi
 
         sleep 10
