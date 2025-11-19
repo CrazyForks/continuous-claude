@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## [v0.6.4] - 2025-11-19
+
+## What's Changed
+
+- :white_check_mark: Add new tests for `validate_requirements`, `get_iteration_display`, `parse_claude_result`, and `create_iteration_branch` functions. (a8dfb39)
+
+**Full Changelog**: https://github.com/AnandChowdhary/continuous-claude/compare/v0.6.3...v0.6.4
+
+## Installation
+
+Install with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnandChowdhary/continuous-claude/refs/tags/v0.6.4/install.sh | bash
+```
+
+Or download the script directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnandChowdhary/continuous-claude/refs/tags/v0.6.4/continuous_claude.sh -o continuous-claude
+chmod +x continuous-claude
+sudo mv continuous-claude /usr/local/bin/
+```
+
 ## [v0.6.3] - 2025-11-19
 
 ## What's Changed
