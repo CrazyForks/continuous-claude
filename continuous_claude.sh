@@ -866,7 +866,20 @@ run_claude_iteration() {
         return 0
     fi
 
-    claude -p "$prompt" $flags "${EXTRA_CLAUDE_FLAGS[@]}" 2> >(tee "$error_log" >&2)
+    # Run claude and capture both stdout and stderr
+    # stderr goes to both the terminal (via tee to &2) and the error log file
+    local exit_code=0
+    claude -p "$prompt" $flags "${EXTRA_CLAUDE_FLAGS[@]}" 2> >(tee "$error_log" >&2) || exit_code=$?
+    
+    # If claude failed, ensure we have some error info
+    if [ $exit_code -ne 0 ]; then
+        if [ ! -s "$error_log" ]; then
+            echo "Claude Code exited with code $exit_code but produced no error output" >> "$error_log"
+        fi
+        return $exit_code
+    fi
+    
+    return 0
 }
 
 parse_claude_result() {
@@ -897,16 +910,31 @@ handle_iteration_error() {
     
     case "$error_type" in
         "exit_code")
+            echo "" >&2
             echo "❌ $iteration_display Error occurred ($error_count consecutive errors):" >&2
-            cat "$ERROR_LOG" >&2
+            echo "" >&2
+            if [ -f "$ERROR_LOG" ] && [ -s "$ERROR_LOG" ]; then
+                echo "Error details:" >&2
+                cat "$ERROR_LOG" >&2
+            else
+                echo "No error details captured in log file" >&2
+                echo "Error log path: $ERROR_LOG" >&2
+            fi
+            echo "" >&2
             ;;
         "invalid_json")
+            echo "" >&2
             echo "❌ $iteration_display Error: Invalid JSON response ($error_count consecutive errors):" >&2
+            echo "" >&2
             echo "$error_output" >&2
+            echo "" >&2
             ;;
         "claude_error")
+            echo "" >&2
             echo "❌ $iteration_display Error in Claude Code response ($error_count consecutive errors):" >&2
+            echo "" >&2
             echo "$error_output" | jq -r '.result // .' >&2
+            echo "" >&2
             ;;
     esac
     
@@ -1037,7 +1065,12 @@ $notes_content
     echo "🤖 $iteration_display Running Claude Code..." >&2
     
     local result
-    if ! result=$(run_claude_iteration "$enhanced_prompt" "$ADDITIONAL_FLAGS" "$ERROR_LOG"); then
+    local claude_exit_code=0
+    result=$(run_claude_iteration "$enhanced_prompt" "$ADDITIONAL_FLAGS" "$ERROR_LOG") || claude_exit_code=$?
+    
+    if [ $claude_exit_code -ne 0 ]; then
+        echo "" >&2
+        echo "⚠️  Claude Code command failed with exit code: $claude_exit_code" >&2
         # Clean up branch on error
         if [ -n "$branch_name" ] && git rev-parse --git-dir > /dev/null 2>&1; then
             git checkout "$main_branch" >/dev/null 2>&1
