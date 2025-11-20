@@ -420,3 +420,130 @@ setup() {
     assert_output --partial "Project completed! Detected completion signal 3 times in a row"
     refute_output --partial "Total cost"
 }
+
+@test "run_claude_iteration captures stderr to error log" {
+    source "$SCRIPT_PATH"
+    
+    # Mock claude to output to stderr
+    function claude() {
+        echo "This is an error message" >&2
+        return 1
+    }
+    export -f claude
+    
+    # Create temp error log
+    local error_log=$(mktemp)
+    
+    # Run the function (should fail)
+    run run_claude_iteration "test prompt" "--output-format json" "$error_log"
+    
+    # Should fail
+    assert_failure
+    
+    # Error log should contain the error message
+    assert [ -f "$error_log" ]
+    assert [ -s "$error_log" ]
+    local error_content=$(cat "$error_log")
+    assert_equal "$error_content" "This is an error message"
+    
+    rm -f "$error_log"
+}
+
+@test "run_claude_iteration handles empty stderr on failure" {
+    source "$SCRIPT_PATH"
+    
+    # Mock claude to fail silently
+    function claude() {
+        return 1
+    }
+    export -f claude
+    
+    # Create temp error log
+    local error_log=$(mktemp)
+    
+    # Run the function (should fail)
+    run run_claude_iteration "test prompt" "--output-format json" "$error_log"
+    
+    # Should fail
+    assert_failure
+    
+    # Error log should contain fallback message
+    assert [ -f "$error_log" ]
+    assert [ -s "$error_log" ]
+    
+    # Check the error log file contents
+    local error_content=$(cat "$error_log")
+    
+    # Check for the main error message
+    if ! echo "$error_content" | grep -q "Claude Code exited with code 1 but produced no error output"; then
+        fail "Error log should contain main error message"
+    fi
+    
+    # Check that helpful guidance is included
+    if ! echo "$error_content" | grep -q "This usually means:"; then
+        fail "Error log should contain troubleshooting tips"
+    fi
+    
+    if ! echo "$error_content" | grep -q "Try running this command directly"; then
+        fail "Error log should contain command suggestion"
+    fi
+    
+    rm -f "$error_log"
+}
+
+@test "run_claude_iteration dry run mode" {
+    source "$SCRIPT_PATH"
+    
+    DRY_RUN="true"
+    local error_log=$(mktemp)
+    
+    # Run in dry run mode
+    run run_claude_iteration "test prompt" "--output-format json" "$error_log"
+    
+    # Should succeed
+    assert_success
+    
+    # Should output dry run message to stderr
+    assert_output --partial "(DRY RUN) Would run Claude Code"
+    
+    rm -f "$error_log"
+}
+
+@test "run_claude_iteration extracts error from JSON stdout" {
+    source "$SCRIPT_PATH"
+    
+    # Mock claude to output JSON error to stdout (like "Session limit reached")
+    function claude() {
+        echo '{"type":"result","is_error":true,"result":"Session limit reached ∙ resets 7pm"}' >&1
+        return 1
+    }
+    # Mock jq to be available
+    function jq() {
+        command jq "$@"
+    }
+    export -f claude jq
+    
+    # Create temp error log
+    local error_log=$(mktemp)
+    
+    # Run the function (should fail)
+    run run_claude_iteration "test prompt" "--output-format json" "$error_log"
+    
+    # Should fail
+    assert_failure
+    
+    # Error log should contain the extracted error message
+    assert [ -f "$error_log" ]
+    assert [ -s "$error_log" ]
+    
+    local error_content=$(cat "$error_log")
+    
+    # Check that the error message was extracted from JSON
+    if ! echo "$error_content" | grep -q "Session limit reached"; then
+        echo "Expected error log to contain 'Session limit reached', but got:"
+        echo "$error_content"
+        fail "Error log should contain extracted JSON error message"
+    fi
+    
+    rm -f "$error_log"
+}

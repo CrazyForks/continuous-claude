@@ -867,17 +867,59 @@ run_claude_iteration() {
     fi
 
     # Run claude and capture both stdout and stderr
-    # stderr goes to both the terminal (via tee to &2) and the error log file
+    # Use temporary files for both to ensure synchronous capture
+    local temp_stdout=$(mktemp)
+    local temp_stderr=$(mktemp)
     local exit_code=0
-    claude -p "$prompt" $flags "${EXTRA_CLAUDE_FLAGS[@]}" 2> >(tee "$error_log" >&2) || exit_code=$?
     
-    # If claude failed, ensure we have some error info
+    # Capture both stdout and stderr to temp files
+    claude -p "$prompt" $flags "${EXTRA_CLAUDE_FLAGS[@]}" >"$temp_stdout" 2>"$temp_stderr" || exit_code=$?
+    
+    # Output stdout (JSON result) so caller can capture it
+    if [ -f "$temp_stdout" ] && [ -s "$temp_stdout" ]; then
+        cat "$temp_stdout"
+    fi
+    
+    # Display stderr to terminal and save to error log
+    if [ -f "$temp_stderr" ] && [ -s "$temp_stderr" ]; then
+        cat "$temp_stderr" >&2
+        cat "$temp_stderr" > "$error_log"
+    fi
+    
+    # If claude failed, check for error info in both stderr and stdout (JSON)
     if [ $exit_code -ne 0 ]; then
-        if [ ! -s "$error_log" ]; then
-            echo "Claude Code exited with code $exit_code but produced no error output" >> "$error_log"
+        # If stderr is empty, try to extract error from JSON stdout
+        if [ ! -s "$error_log" ] && [ -f "$temp_stdout" ] && [ -s "$temp_stdout" ]; then
+            # Check if stdout contains JSON with error info
+            local json_error=$(cat "$temp_stdout" | jq -r 'if .is_error == true then .result // .error // "Unknown error" else empty end' 2>/dev/null || echo "")
+            if [ -n "$json_error" ]; then
+                echo "$json_error" > "$error_log"
+                echo "$json_error" >&2
+            fi
         fi
+        
+        # If still no error info, provide fallback message
+        if [ ! -s "$error_log" ]; then
+            {
+                echo "Claude Code exited with code $exit_code but produced no error output"
+                echo ""
+                echo "This usually means:"
+                echo "  - Claude Code crashed or failed to start"
+                echo "  - An authentication or permission issue occurred"
+                echo "  - The command arguments are invalid"
+                echo ""
+                echo "Try running this command directly to see the full error:"
+                echo "  claude -p \"$prompt\" $flags ${EXTRA_CLAUDE_FLAGS[*]}"
+            } >> "$error_log"
+        fi
+        
+        # Cleanup temp files after error handling
+        rm -f "$temp_stdout" "$temp_stderr"
         return $exit_code
     fi
+    
+    # Cleanup temp files on success
+    rm -f "$temp_stdout" "$temp_stderr"
     
     return 0
 }
