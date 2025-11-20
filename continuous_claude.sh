@@ -1092,10 +1092,8 @@ $notes_content
     echo "🤖 $iteration_display Running $agent_name..." >&2
     
     local result
-    local agent_exit_code=0
-    if ! result=$(run_agent_iteration "$enhanced_prompt" "$ERROR_LOG"); then
-        agent_exit_code=$?
-    fi
+    result=$(run_agent_iteration "$enhanced_prompt" "$ERROR_LOG")
+    local agent_exit_code=$?
     
     local parse_result=$(parse_agent_result "$result" "$agent_exit_code")
     if [ "$?" != "0" ]; then
