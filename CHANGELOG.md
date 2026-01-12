@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## [v0.18.1] - 2026-01-12
+
+### What's Changed
+
+- :recycle: Show running total in cost reporting (20621b8)
+
+**Full Changelog**: https://github.com/AnandChowdhary/continuous-claude/compare/v0.18.0...v0.18.1
+
+
 ## [v0.18.0] - 2026-01-09
 
 ### What's Changed
