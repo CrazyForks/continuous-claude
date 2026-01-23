@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## [v0.20.2] - 2026-01-23
+
+### What's Changed
+
+- :recycle: Extend command detail truncation limits (b67fa60)
+
+**Full Changelog**: https://github.com/AnandChowdhary/continuous-claude/compare/v0.20.1...v0.20.2
+
+
 ## [v0.20.1] - 2026-01-23
 
 ### What's Changed
