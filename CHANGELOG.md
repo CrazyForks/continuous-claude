@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## [v0.20.0] - 2026-01-23
+
+### What's Changed
+
+- :sparkles: Enhance tool logging functionality (0324ee3)
+
+**Full Changelog**: https://github.com/AnandChowdhary/continuous-claude/compare/v0.19.0...v0.20.0
+
+
 ## [v0.19.0] - 2026-01-23
 
 ### What's Changed
