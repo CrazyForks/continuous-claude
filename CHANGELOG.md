@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## [v0.20.3] - 2026-01-26
+
+### What's Changed
+
+- :art: Update emoji for Write action (b80f97d)
+
+**Full Changelog**: https://github.com/AnandChowdhary/continuous-claude/compare/v0.20.2...v0.20.3
+
+
 ## [v0.20.2] - 2026-01-23
 
 ### What's Changed
