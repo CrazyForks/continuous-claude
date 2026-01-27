@@ -296,13 +296,101 @@ get_latest_version() {
     if ! command -v gh &> /dev/null; then
         return 1
     fi
-    
+
     latest_version=$(gh release view --repo AnandChowdhary/continuous-claude --json tagName --jq '.tagName' 2>/dev/null)
     if [ -z "$latest_version" ]; then
         return 1
     fi
-    
+
     echo "$latest_version"
+    return 0
+}
+
+convert_gitmoji() {
+    # Convert gitmoji codes to actual emoji characters
+    sed -e 's/:sparkles:/✨/g' \
+        -e 's/:bug:/🐛/g' \
+        -e 's/:bookmark:/🔖/g' \
+        -e 's/:recycle:/♻️/g' \
+        -e 's/:art:/🎨/g' \
+        -e 's/:pencil:/✏️/g' \
+        -e 's/:memo:/📝/g' \
+        -e 's/:construction_worker:/👷/g' \
+        -e 's/:rocket:/🚀/g' \
+        -e 's/:white_check_mark:/✅/g' \
+        -e 's/:lock:/🔒/g' \
+        -e 's/:fire:/🔥/g' \
+        -e 's/:ambulance:/🚑/g' \
+        -e 's/:lipstick:/💄/g' \
+        -e 's/:rotating_light:/🚨/g' \
+        -e 's/:construction:/🚧/g' \
+        -e 's/:green_heart:/💚/g' \
+        -e 's/:arrow_down:/⬇️/g' \
+        -e 's/:arrow_up:/⬆️/g' \
+        -e 's/:pushpin:/📌/g' \
+        -e 's/:tada:/🎉/g' \
+        -e 's/:wrench:/🔧/g' \
+        -e 's/:hammer:/🔨/g' \
+        -e 's/:package:/📦/g' \
+        -e 's/:truck:/🚚/g' \
+        -e 's/:bento:/🍱/g' \
+        -e 's/:wheelchair:/♿/g' \
+        -e 's/:bulb:/💡/g' \
+        -e 's/:beers:/🍻/g' \
+        -e 's/:speech_balloon:/💬/g' \
+        -e 's/:card_file_box:/🗃️/g' \
+        -e 's/:loud_sound:/🔊/g' \
+        -e 's/:mute:/🔇/g' \
+        -e 's/:busts_in_silhouette:/👥/g' \
+        -e 's/:children_crossing:/🚸/g' \
+        -e 's/:building_construction:/🏗️/g' \
+        -e 's/:iphone:/📱/g' \
+        -e 's/:clown_face:/🤡/g' \
+        -e 's/:egg:/🥚/g' \
+        -e 's/:see_no_evil:/🙈/g' \
+        -e 's/:camera_flash:/📸/g' \
+        -e 's/:alembic:/⚗️/g' \
+        -e 's/:mag:/🔍/g' \
+        -e 's/:label:/🏷️/g' \
+        -e 's/:seedling:/🌱/g' \
+        -e 's/:triangular_flag_on_post:/🚩/g' \
+        -e 's/:goal_net:/🥅/g' \
+        -e 's/:dizzy:/💫/g' \
+        -e 's/:wastebasket:/🗑️/g' \
+        -e 's/:passport_control:/🛂/g' \
+        -e 's/:adhesive_bandage:/🩹/g' \
+        -e 's/:monocle_face:/🧐/g' \
+        -e 's/:coffin:/⚰️/g' \
+        -e 's/:test_tube:/🧪/g' \
+        -e 's/:necktie:/👔/g' \
+        -e 's/:stethoscope:/🩺/g' \
+        -e 's/:bricks:/🧱/g' \
+        -e 's/:technologist:/🧑‍💻/g' \
+        -e 's/:zap:/⚡/g' \
+        -e 's/:heavy_plus_sign:/➕/g' \
+        -e 's/:heavy_minus_sign:/➖/g' \
+        -e 's/:twisted_rightwards_arrows:/🔀/g' \
+        -e 's/:rewind:/⏪/g' \
+        -e 's/:boom:/💥/g' \
+        -e 's/:ok_hand:/👌/g' \
+        -e 's/:new:/🆕/g' \
+        -e 's/:up:/🆙/g'
+}
+
+get_release_notes() {
+    # Fetch release notes for a specific version from GitHub
+    local version="$1"
+    if ! command -v gh &> /dev/null; then
+        return 1
+    fi
+
+    local notes
+    notes=$(gh release view "$version" --repo AnandChowdhary/continuous-claude --json body --jq '.body' 2>/dev/null)
+    if [ -z "$notes" ]; then
+        return 1
+    fi
+
+    echo "$notes" | convert_gitmoji
     return 0
 }
 
@@ -450,11 +538,22 @@ check_for_updates() {
         # Current version is older
         echo "" >&2
         echo "🆕 A new version of continuous-claude is available: $latest_version (current: $VERSION)" >&2
-        
+
+        # Display release notes if available
+        local release_notes
+        if release_notes=$(get_release_notes "$latest_version"); then
+            echo "" >&2
+            echo "📋 Release notes:" >&2
+            echo "─────────────────────────────────────────" >&2
+            echo "$release_notes" >&2
+            echo "─────────────────────────────────────────" >&2
+        fi
+
         if [ "$skip_prompt" = "true" ]; then
             return 0
         fi
-        
+
+        echo "" >&2
         local response
         if [ "$AUTO_UPDATE" = "true" ]; then
             response="y"
@@ -514,6 +613,17 @@ handle_update_command() {
     # Current version is older
     echo "🆕 New version available: $latest_version (current: $VERSION)" >&2
 
+    # Display release notes if available
+    local release_notes
+    if release_notes=$(get_release_notes "$latest_version"); then
+        echo "" >&2
+        echo "📋 Release notes:" >&2
+        echo "─────────────────────────────────────────" >&2
+        echo "$release_notes" >&2
+        echo "─────────────────────────────────────────" >&2
+    fi
+
+    echo "" >&2
     local response
     if [ "$AUTO_UPDATE" = "true" ]; then
         response="y"
@@ -528,7 +638,7 @@ handle_update_command() {
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
         local script_path=$(get_script_path)
-        
+
         if download_and_install_update "$latest_version" "$script_path"; then
             echo "✅ Update complete! Version $latest_version is now installed." >&2
             exit 0
